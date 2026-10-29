@@ -15,9 +15,20 @@ jobs:
       - name: Unzip Android project
         run: unzip -o "adda-android-v2 (1).zip"
 
-      - name: Show Screens.kt lines around the compile errors
+      - name: Fix Screens.kt Button modifier argument
         working-directory: adda-android-v2
-        run: grep -n "" app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt | sed -n '50,120p'
+        run: |
+          python3 - <<'PYEOF'
+          from pathlib import Path
+          p = Path("app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt")
+          s = p.read_text()
+          old = "Button(Modifier.fillMaxWidth().height(52.dp), onClick = "
+          new = "Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = "
+          n = s.count(old)
+          assert n == 2, f"expected 2 occurrences, found {n}"
+          p.write_text(s.replace(old, new))
+          print(f"Fixed {n} Button() calls in Screens.kt")
+          PYEOF
 
       - name: Generate launcher icons from Adda logo
         working-directory: adda-android-v2
