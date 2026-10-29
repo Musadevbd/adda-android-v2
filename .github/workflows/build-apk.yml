@@ -30,6 +30,10 @@ jobs:
           print(f"Fixed {n} Button() calls in Screens.kt")
           PYEOF
 
+      - name: Show AddaViewModel.kt around the declaration clash (temporary)
+        working-directory: adda-android-v2
+        run: grep -n "" app/src/main/java/com/abumusa/adda/AddaViewModel.kt | sed -n '1,60p'
+
       - name: Generate launcher icons from Adda logo
         working-directory: adda-android-v2
         run: |
