@@ -19,13 +19,9 @@ jobs:
         working-directory: adda-android-v2
         run: sed -i -E 's/ android:(icon|roundIcon)="@mipmap\/ic_launcher(_round)?"//g' app/src/main/AndroidManifest.xml
 
-      - name: Show build config
+      - name: Fix compose compiler version
         working-directory: adda-android-v2
-        run: |
-          for f in build.gradle app/build.gradle settings.gradle gradle/libs.versions.toml; do
-            echo "===== $f ====="
-            cat "$f" 2>/dev/null || echo "(missing)"
-          done
+        run: sed -i "s/kotlinCompilerExtensionVersion '1.7.2'/kotlinCompilerExtensionVersion '1.5.13'/" app/build.gradle
 
       - name: Set up Java
         uses: actions/setup-java@v4
