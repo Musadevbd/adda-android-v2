@@ -30,9 +30,37 @@ jobs:
           print(f"Fixed {n} Button() calls in Screens.kt")
           PYEOF
 
-      - name: Show AddaViewModel.kt around the declaration clash (temporary)
+      - name: Fix AddaViewModel.kt declaration clash
         working-directory: adda-android-v2
-        run: grep -n "" app/src/main/java/com/abumusa/adda/AddaViewModel.kt | sed -n '1,60p'
+        run: |
+          python3 - <<'PYEOF'
+          from pathlib import Path
+          import re
+          p = Path("app/src/main/java/com/abumusa/adda/AddaViewModel.kt")
+          s = p.read_text()
+          if "import kotlin.jvm.JvmName" not in s:
+              lines = s.split("\n")
+              last_import = max(i for i, l in enumerate(lines) if l.startswith("import "))
+              lines.insert(last_import + 1, "import kotlin.jvm.JvmName")
+              s = "\n".join(lines)
+              print("Added kotlin.jvm.JvmName import")
+          props = re.findall(r"var\s+(\w+)\b[^;\n]*;\s*private\s+set", s)
+          print("private-set properties:", props)
+          fixed = 0
+          for name in props:
+              setter = "set" + name[0].upper() + name[1:]
+              pat = re.compile(r"(?m)^([ \t]*)fun\s+" + re.escape(setter) + r"\s*\(")
+              def repl(m, setter=setter):
+                  ind = m.group(1)
+                  return ind + '@JvmName("' + setter + 'Jvm")\n' + ind + "fun " + setter + "("
+              s, n = pat.subn(repl, s)
+              if n:
+                  print(f"Annotated {setter}: {n} occurrence(s)")
+                  fixed += n
+          assert fixed >= 1, "no clashing setter functions found"
+          p.write_text(s)
+          print(f"Fixed {fixed} declaration clash(es) in AddaViewModel.kt")
+          PYEOF
 
       - name: Generate launcher icons from Adda logo
         working-directory: adda-android-v2
