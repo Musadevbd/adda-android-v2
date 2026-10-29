@@ -122,27 +122,9 @@ jobs:
           print("Screens.kt patched for the inbox LazyColumn crash")
           PYEOF
 
-            - name: Fix Data.kt DAO main-thread crash
-                    working-directory: adda-android-v2
-                            run: |
-                                      python3 - <<'PYEOF
-                                                import re
-                                                          from pathlib import Path
-                                                                    # Room "Cannot access database on the main thread": make the six DAO insert/update methods suspend
-                                                                              p = Path("app/src/main/java/com/abumusa/adda/data/Data.kt")
-                                                                                        s = p.read_text()
-                                                                                                  names = ["insertAccount", "updateAccount", "insertRequest",
-                                                                                                                     "insertFriendship", "insertMessage", "insertCall"]
-                                                                                                                               total = 0
-                                                                                                                                         for name in names:
-                                                                                                                                                       s, n = re.subn(r"(?<!suspend )fun " + name + r"\(", "suspend fun " + name + "(", s)
-                                                                                                                                                                     assert n >= 1, f"expected at least 1 declaration of {name}, found none"
-                                                                                                                                                                                   print(f"{name}: {n} declaration(s) made suspend")
-                                                                                                                                                                                                 total += n
-                                                                                                                                                                                                           p.write_text(s)
-                                                                                                                                                                                                                     print(f"Made {total} DAO method(s) suspend in Data.kt")
-                                                                                                                                                                                                                               PYEOF
-                                                                                                                                                                                                                               
+                                                                                                          - name: Fix Data.kt DAO main-thread crash
+                                                                                                            working-directory: adda-android-v2
+                                                                                                            run: sed -i -E 's/\bfun (insertAccount|updateAccount|insertRequest|insertFriendship|insertMessage|insertCall)\(/suspend fun \1(/g' app/src/main/java/com/abumusa/adda/data/Data.kt        
                                                                                                                                                                                                                                - name: Fix AddaViewModel.kt declaration clash
         working-directory: adda-android-v2
         run: |
