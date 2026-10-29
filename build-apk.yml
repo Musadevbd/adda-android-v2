@@ -40,13 +40,16 @@ jobs:
           p = Path("app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt")
           s = p.read_text()
 
+          FUN = r"(?m)^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t\r\n]+)*fun[ \t]+(\w+)\b"
+          DECLS = [(m.start(), m.group(1)) for m in re.finditer(FUN, s)]
+          print("functions found:", [d[1] for d in DECLS])
+
 
           def section(name):
-              m = re.search(r"(?m)^[ \t]*fun " + name + r"\b", s)
-              assert m, name + " not found"
-              start = m.start()
-              m2 = re.search(r"(?m)^[ \t]*fun ", s[m.end():])
-              end = m.end() + m2.start() if m2 else len(s)
+              idx = next((i for i, d in enumerate(DECLS) if d[1] == name), None)
+              assert idx is not None, name + " not found"
+              start = DECLS[idx][0]
+              end = DECLS[idx + 1][0] if idx + 1 < len(DECLS) else len(s)
               return start, end
 
 
