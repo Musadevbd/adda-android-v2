@@ -15,9 +15,31 @@ jobs:
       - name: Unzip Android project
         run: unzip -o "adda-android-v2 (1).zip"
 
-      - name: Fix missing launcher icons
+      - name: Generate launcher icons from Adda logo
         working-directory: adda-android-v2
-        run: sed -i -E 's/ android:(icon|roundIcon)="@mipmap\/ic_launcher(_round)?"//g' app/src/main/AndroidManifest.xml
+        run: |
+          python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow
+          python3 - <<'PYEOF'
+          import os
+          from PIL import Image, ImageDraw
+
+          logo = Image.open("../.github/assets/adda-logo.webp").convert("RGBA")
+          w, h = logo.size
+          side = min(w, h)
+          logo = logo.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
+
+          densities = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+          for density, size in densities.items():
+              res_dir = f"app/src/main/res/mipmap-{density}"
+              os.makedirs(res_dir, exist_ok=True)
+              logo.resize((size, size), Image.LANCZOS).save(f"{res_dir}/ic_launcher.png")
+              mask = Image.new("L", (size, size), 0)
+              ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
+              rounded = logo.resize((size, size), Image.LANCZOS)
+              rounded.putalpha(mask)
+              rounded.save(f"{res_dir}/ic_launcher_round.png")
+          print("Launcher icons generated from the Adda logo.")
+          PYEOF
 
       - name: Fix Kotlin and compose compiler versions
         working-directory: adda-android-v2
