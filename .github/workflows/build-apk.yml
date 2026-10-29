@@ -122,9 +122,10 @@ jobs:
           print("Screens.kt patched for the inbox LazyColumn crash")
           PYEOF
 
-                                                                                                          - name: Fix Data.kt DAO main-thread crash
-                                                                                                            working-directory: adda-android-v2
-                                                                                                            run: sed -i -E 's/\bfun (insertAccount|updateAccount|insertRequest|insertFriendship|insertMessage|insertCall)\(/suspend fun \1(/g' app/src/main/java/com/abumusa/adda/data/Data.kt        
+      - name: Fix Data.kt DAO main-thread crash
+        working-directory: adda-android-v2
+        run: |
+          sed -i -E 's/\bfun (insertAccount|updateAccount|insertRequest|insertFriendship|insertMessage|insertCall)\(/suspend fun \1(/g' app/src/main/java/com/abumusa/adda/data/Data.kt        
                                                                                                                                                                                                                                - name: Fix AddaViewModel.kt declaration clash
         working-directory: adda-android-v2
         run: |
