@@ -19,9 +19,12 @@ jobs:
         working-directory: adda-android-v2
         run: sed -i -E 's/ android:(icon|roundIcon)="@mipmap\/ic_launcher(_round)?"//g' app/src/main/AndroidManifest.xml
 
-      - name: Fix compose compiler version
+      - name: Fix Kotlin and compose compiler versions
         working-directory: adda-android-v2
-        run: sed -i "s/kotlinCompilerExtensionVersion '1.7.2'/kotlinCompilerExtensionVersion '1.5.13'/" app/build.gradle
+        run: |
+          sed -i "s/kotlinCompilerExtensionVersion '1.7.2'/kotlinCompilerExtensionVersion '1.5.13'/" app/build.gradle
+          sed -i "s/id 'org.jetbrains.kotlin.android' version '1.9.24'/id 'org.jetbrains.kotlin.android' version '1.9.23'/" build.gradle
+          sed -i "s/id 'com.google.devtools.ksp' version '1.9.24-1.0.20'/id 'com.google.devtools.ksp' version '1.9.23-1.0.20'/" build.gradle
 
       - name: Set up Java
         uses: actions/setup-java@v4
