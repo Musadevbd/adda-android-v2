@@ -30,6 +30,95 @@ jobs:
           print(f"Fixed {n} Button() calls in Screens.kt")
           PYEOF
 
+      - name: Fix Screens.kt LazyColumn infinite-height crash
+        working-directory: adda-android-v2
+        run: |
+          python3 - <<'PYEOF'
+          from pathlib import Path
+          import re
+
+          p = Path("app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt")
+          s = p.read_text()
+
+
+          def section(name):
+              m = re.search(r"(?m)^[ \t]*fun " + name + r"\b", s)
+              assert m, name + " not found"
+              start = m.start()
+              m2 = re.search(r"(?m)^[ \t]*fun ", s[m.end():])
+              end = m.end() + m2.start() if m2 else len(s)
+              return start, end
+
+
+          def show(name):
+              st, en = section(name)
+              print("===== " + name + " BEFORE =====")
+              print(s[st:en])
+              print("===== END " + name + " =====")
+
+
+          def lazycolumn_open(seg, at):
+              i = at + len("LazyColumn")
+              depth = 0
+              while i < len(seg):
+                  c = seg[i]
+                  if c == "(":
+                      depth += 1
+                  elif c == ")":
+                      depth -= 1
+                      assert depth >= 0, "unbalanced parens near LazyColumn"
+                  elif c == "{" and depth == 0:
+                      return i
+                  elif depth == 0 and c not in " \t\r\n":
+                      raise AssertionError("unexpected %r before LazyColumn block" % c)
+                  i += 1
+              raise AssertionError("LazyColumn block opening not found")
+
+
+          def lazycolumns_with_items(seg, items_pat):
+              found = []
+              for m in re.finditer(r"LazyColumn", seg):
+                  br = lazycolumn_open(seg, m.start())
+                  if re.search(items_pat, seg[br + 1:br + 601]):
+                      found.append((m.start(), br))
+              return found
+
+
+          show("MessagesScreen")
+          show("PeopleScreen")
+
+          # MessagesScreen: the chat-list LazyColumn sits in a Column with no weight,
+          # so Compose measures it with infinite height and the app crashes on entry.
+          mst, men = section("MessagesScreen")
+          mseg = s[mst:men]
+          cands = lazycolumns_with_items(mseg, r"\bitems\s*\(")
+          assert len(cands) == 1, "expected 1 chat-list LazyColumn in MessagesScreen, found %d" % len(cands)
+          st, br = cands[0]
+          mseg = mseg[:st] + "LazyColumn(Modifier.weight(1f)) {" + mseg[br + 1:]
+          s = s[:mst] + mseg + s[men:]
+          print("MessagesScreen: chat-list LazyColumn now uses Modifier.weight(1f)")
+
+          # PeopleScreen: a LazyColumn nested in a vertically scrollable Column is also
+          # measured with infinite height; use a plain Column with forEach instead.
+          pst, pen = section("PeopleScreen")
+          pseg = s[pst:pen]
+          assert pseg.count("LazyColumn") == 1, "expected 1 LazyColumn in PeopleScreen"
+          cands = lazycolumns_with_items(pseg, r"\bitems\s*\(\s*others\s*\)")
+          assert len(cands) == 1, "expected 1 LazyColumn with items(others) in PeopleScreen, found %d" % len(cands)
+          st, br = cands[0]
+          pseg = pseg[:st] + "Column {" + pseg[br + 1:]
+          im = re.search(r"\bitems\s*\(\s*others\s*\)", pseg[st:])
+          assert im, "items(others) not found in PeopleScreen"
+          pseg = pseg[:st + im.start()] + "others.forEach" + pseg[st + im.end():]
+          assert "LazyColumn" not in pseg, "LazyColumn still present in PeopleScreen"
+          assert not re.search(r"\bitems\s*\(\s*others\s*\)", pseg), "items(others) still present in PeopleScreen"
+          s = s[:pst] + pseg + s[pen:]
+          print("PeopleScreen: LazyColumn/items(others) replaced with Column/others.forEach")
+
+          p.write_text(s)
+          print("Screens.kt patched for the inbox LazyColumn crash")
+          PYEOF
+
       - name: Fix AddaViewModel.kt declaration clash
         working-directory: adda-android-v2
         run: |
