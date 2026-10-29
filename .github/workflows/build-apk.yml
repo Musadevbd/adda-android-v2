@@ -19,6 +19,14 @@ jobs:
         working-directory: adda-android-v2
         run: sed -i -E 's/ android:(icon|roundIcon)="@mipmap\/ic_launcher(_round)?"//g' app/src/main/AndroidManifest.xml
 
+      - name: Show build config
+        working-directory: adda-android-v2
+        run: |
+          for f in build.gradle app/build.gradle settings.gradle gradle/libs.versions.toml; do
+            echo "===== $f ====="
+            cat "$f" 2>/dev/null || echo "(missing)"
+          done
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
