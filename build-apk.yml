@@ -15,6 +15,10 @@ jobs:
       - name: Unzip Android project
         run: unzip -o "adda-android-v2 (1).zip"
 
+      - name: Show Screens.kt lines around the compile errors
+        working-directory: adda-android-v2
+        run: grep -n "" app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt | sed -n '50,120p'
+
       - name: Generate launcher icons from Adda logo
         working-directory: adda-android-v2
         run: |
