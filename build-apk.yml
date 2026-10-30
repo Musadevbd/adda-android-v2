@@ -1,218 +1,27 @@
 name: Build Android APK
-
 on:
-  workflow_dispatch:
   push:
-    branches: [main, master]
-
+    branches: [main]
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Unzip Android project
-        run: unzip -o "adda-android-v2 (1).zip"
-
-      - name: Fix Screens.kt Button modifier argument
-        working-directory: adda-android-v2
-        run: |
-          python3 - <<'PYEOF'
-          from pathlib import Path
-          p = Path("app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt")
-          s = p.read_text()
-          old = "Button(Modifier.fillMaxWidth().height(52.dp), onClick = "
-          new = "Button(modifier = Modifier.fillMaxWidth().height(52.dp), onClick = "
-          n = s.count(old)
-          assert n == 2, f"expected 2 occurrences, found {n}"
-          p.write_text(s.replace(old, new))
-          print(f"Fixed {n} Button() calls in Screens.kt")
-          PYEOF
-
-      - name: Fix Screens.kt LazyColumn infinite-height crash
-        working-directory: adda-android-v2
-        run: |
-          python3 - <<'PYEOF'
-          from pathlib import Path
-          import re
-
-          p = Path("app/src/main/java/com/abumusa/adda/ui/screens/Screens.kt")
-          s = p.read_text()
-
-          FUN = r"(?m)^[ \t]*(?:@\w+(?:\([^)]*\))?[ \t\r\n]+)*fun[ \t]+(\w+)\b"
-          DECLS = [(m.start(), m.group(1)) for m in re.finditer(FUN, s)]
-          print("functions found:", [d[1] for d in DECLS])
-
-
-          def section(name):
-              idx = next((i for i, d in enumerate(DECLS) if d[1] == name), None)
-              assert idx is not None, name + " not found"
-              start = DECLS[idx][0]
-              end = DECLS[idx + 1][0] if idx + 1 < len(DECLS) else len(s)
-              return start, end
-
-
-          def show(name):
-              st, en = section(name)
-              print("===== " + name + " BEFORE =====")
-              print(s[st:en])
-              print("===== END " + name + " =====")
-
-
-          def lazycolumn_open(seg, at):
-              i = at + len("LazyColumn")
-              depth = 0
-              while i < len(seg):
-                  c = seg[i]
-                  if c == "(":
-                      depth += 1
-                  elif c == ")":
-                      depth -= 1
-                      assert depth >= 0, "unbalanced parens near LazyColumn"
-                  elif c == "{" and depth == 0:
-                      return i
-                  elif depth == 0 and c not in " \t\r\n":
-                      raise AssertionError("unexpected %r before LazyColumn block" % c)
-                  i += 1
-              raise AssertionError("LazyColumn block opening not found")
-
-
-          def lazycolumns_with_items(seg, items_pat):
-              found = []
-              for m in re.finditer(r"LazyColumn", seg):
-                  br = lazycolumn_open(seg, m.start())
-                  if re.search(items_pat, seg[br + 1:br + 601]):
-                      found.append((m.start(), br))
-              return found
-
-
-          show("MessagesScreen")
-          show("PeopleScreen")
-
-          # MessagesScreen: the chat-list LazyColumn sits in a Column with no weight,
-          # so Compose measures it with infinite height and the app crashes on entry.
-          mst, men = section("MessagesScreen")
-          mseg = s[mst:men]
-          cands = lazycolumns_with_items(mseg, r"\bitems\s*\(")
-          assert len(cands) == 1, "expected 1 chat-list LazyColumn in MessagesScreen, found %d" % len(cands)
-          st, br = cands[0]
-          mseg = mseg[:st] + "LazyColumn(Modifier.weight(1f)) {" + mseg[br + 1:]
-          s = s[:mst] + mseg + s[men:]
-          print("MessagesScreen: chat-list LazyColumn now uses Modifier.weight(1f)")
-
-          # PeopleScreen: a LazyColumn nested in a vertically scrollable Column is also
-          # measured with infinite height; use a plain Column with forEach instead.
-          pst, pen = section("PeopleScreen")
-          pseg = s[pst:pen]
-          assert pseg.count("LazyColumn") == 1, "expected 1 LazyColumn in PeopleScreen"
-          cands = lazycolumns_with_items(pseg, r"\bitems\s*\(\s*others\s*\)")
-          assert len(cands) == 1, "expected 1 LazyColumn with items(others) in PeopleScreen, found %d" % len(cands)
-          st, br = cands[0]
-          pseg = pseg[:st] + "Column {" + pseg[br + 1:]
-          im = re.search(r"\bitems\s*\(\s*others\s*\)", pseg[st:])
-          assert im, "items(others) not found in PeopleScreen"
-          pseg = pseg[:st + im.start()] + "others.forEach" + pseg[st + im.end():]
-          assert "LazyColumn" not in pseg, "LazyColumn still present in PeopleScreen"
-          assert not re.search(r"\bitems\s*\(\s*others\s*\)", pseg), "items(others) still present in PeopleScreen"
-          s = s[:pst] + pseg + s[pen:]
-          print("PeopleScreen: LazyColumn/items(others) replaced with Column/others.forEach")
-
-          p.write_text(s)
-          print("Screens.kt patched for the inbox LazyColumn crash")
-          PYEOF
-
-                                                                                                                                                                                                                                                                     
-            - name: Fix AddaViewModel.kt declaration clash
-        working-directory: adda-android-v2
-        run: |
-          python3 - <<'PYEOF'
-          from pathlib import Path
-          import re
-          p = Path("app/src/main/java/com/abumusa/adda/AddaViewModel.kt")
-          s = p.read_text()
-          if "import kotlin.jvm.JvmName" not in s:
-              lines = s.split("\n")
-              last_import = max(i for i, l in enumerate(lines) if l.startswith("import "))
-              lines.insert(last_import + 1, "import kotlin.jvm.JvmName")
-              s = "\n".join(lines)
-              print("Added kotlin.jvm.JvmName import")
-          props = re.findall(r"var\s+(\w+)\b[^;\n]*;\s*private\s+set", s)
-          print("private-set properties:", props)
-          fixed = 0
-          for name in props:
-              setter = "set" + name[0].upper() + name[1:]
-              pat = re.compile(r"(?m)^([ \t]*)fun\s+" + re.escape(setter) + r"\s*\(")
-              def repl(m, setter=setter):
-                  ind = m.group(1)
-                  return ind + '@JvmName("' + setter + 'Jvm")\n' + ind + "fun " + setter + "("
-              s, n = pat.subn(repl, s)
-              if n:
-                  print(f"Annotated {setter}: {n} occurrence(s)")
-                  fixed += n
-          assert fixed >= 1, "no clashing setter functions found"
-          p.write_text(s)
-          print(f"Fixed {fixed} declaration clash(es) in AddaViewModel.kt")
-          PYEOF
-
-      - name: Generate launcher icons from Adda logo
-        working-directory: adda-android-v2
-        run: |
-          python3 -m pip install --quiet pillow || python3 -m pip install --quiet --break-system-packages pillow
-          python3 - <<'PYEOF'
-          import os
-          from PIL import Image, ImageDraw
-
-          logo = Image.open("../.github/assets/adda-logo.webp").convert("RGBA")
-          w, h = logo.size
-          side = min(w, h)
-          logo = logo.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
-
-          densities = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
-          for density, size in densities.items():
-              res_dir = f"app/src/main/res/mipmap-{density}"
-              os.makedirs(res_dir, exist_ok=True)
-              logo.resize((size, size), Image.LANCZOS).save(f"{res_dir}/ic_launcher.png")
-              mask = Image.new("L", (size, size), 0)
-              ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
-              rounded = logo.resize((size, size), Image.LANCZOS)
-              rounded.putalpha(mask)
-              rounded.save(f"{res_dir}/ic_launcher_round.png")
-          print("Launcher icons generated from the Adda logo.")
-          PYEOF
-
-      - name: Fix Kotlin and compose compiler versions
-        working-directory: adda-android-v2
-        run: |
-          sed -i "s/kotlinCompilerExtensionVersion '1.7.2'/kotlinCompilerExtensionVersion '1.5.13'/" app/build.gradle
-          sed -i "s/id 'org.jetbrains.kotlin.android' version '1.9.24'/id 'org.jetbrains.kotlin.android' version '1.9.23'/" build.gradle
-        
-          sed -i "s/id 'com.google.devtools.ksp' version '1.9.24-1.0.20'/id 'com.google.devtools.ksp' version '1.9.23-1.0.20'/" build.gradle
-        
-
-# Fix Data.kt DAO main-thread crash: make the six DAO insert/update methods suspend
-
-sed -i -E 's/\bfun (insertAccount|updateAccount|insertRequest|insertFriendship|insertMessage|insertCall)\(/suspend fun \1(/g' app/src/main/java/com/abumusa/adda/data/Data.kt
-      - name: Set up Java
-        uses: actions/setup-java@v4
+        run: unzip -o "adda-android-v3.zip" || unzip -o "adda-android-v2 (1).zip" || unzip -o *.zip
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
-
-      - name: Install SDK
-        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0"
-
       - name: Build APK
-        working-directory: adda-android-v2
-        run: gradle --no-daemon assembleDebug
-
+        working-directory: adda-android-v3
+        run: ./gradlew assembleDebug --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: adda-debug-apk
-          path: adda-android-v2/app/build/outputs/apk/debug/app-debug.apk
+          path: adda-android-v3/app/build/outputs/apk/debug/app-debug.apk
